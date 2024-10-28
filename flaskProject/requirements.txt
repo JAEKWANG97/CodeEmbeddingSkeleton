@@ -1,0 +1,12 @@
+flask #==2.3.3
+transformers #==4.27.4 #4.33.2
+chromadb
+langchain
+torch
+openai
+
+# 추가 의존성
+tf-keras
+sentence-transformers #==2.2.2
+python-dotenv #==1.0.0
+langchain-community
