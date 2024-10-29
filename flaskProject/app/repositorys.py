@@ -8,7 +8,7 @@ def registratinRepository(url, token, projectId):
        local_path='./cloneRepo/' + projectId
     )
     try:
-        chunker.process_project()
+        chunker.process_project(projectId)
         return True
     except Exception as e:
         # 기타 예상치 못한 오류
