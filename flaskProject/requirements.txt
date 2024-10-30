@@ -5,6 +5,8 @@ langchain
 torch
 openai
 langchain
+langchain-community
+langchain-openai
 
 tf-keras
 sentence-transformers #==2.2.2

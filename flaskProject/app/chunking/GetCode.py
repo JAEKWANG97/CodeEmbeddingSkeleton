@@ -155,19 +155,17 @@ class GitLabCodeChunker:
             chunking_path = Path(project_path) / 'chunking'
             chunking_path.mkdir(exist_ok=True)
 
-            # 각 언어별 청크 저장을 위한 딕셔너리
-            language_chunks = {lang: {} for lang in self.file_extensions.keys()}
-
             # 모든 파일 처리
             for root, _, files in os.walk(project_path):
                 for file in files:
                     file_path = Path(root) / file
 
-                    # git 및 chunking 폴더 제외
-                    if '.git' in str(file_path) or 'chunking' in str(file_path):
-                        continue
+                    if ('.git' in str(file_path)
+                        or 'chunking' in str(file_path)
+                        or any(part.startswith('.') for part in file_path.parts)
+                        or any(part.startswith('node_modules') for part in file_path.parts)):
+                            continue
 
-                    # 언어 감지
                     language = self.get_file_language(str(file_path))
                     if not language:
                         continue
@@ -177,23 +175,7 @@ class GitLabCodeChunker:
                     # 파일 청크화
                     chunks = self.chunk_file(str(file_path), language)
                     if chunks:
-                        # 상대 경로로 저장 -> 이후 json 데이터를 임베딩 할 로직 들어갈 위치 ####
-                        # relative_path = str(file_path.relative_to(project_path))
-                        # language_chunks[language][relative_path] = chunks
-                        ###################################################################################
-
-                        # for chunk in chunks:
                         store_embeddings(chunks, projectId)
-
-            # # 각 언어별로 JSON 파일 저장
-            # for language, chunks in language_chunks.items():
-            #     if chunks:  # 청크가 있는 경우만 저장
-            #         output_file = chunking_path / f"{language}_chunks.json"
-            #         with open(output_file, 'w', encoding='utf-8') as f:
-            #             json.dump(chunks, f, indent=2, ensure_ascii=False)
-            #         print(f"{language} 청크 저장 완료: {output_file}")
-
-            # 처리 완료 후 정리
             self.cleanup_project_directory()
 
         except Exception as e:
