@@ -3,9 +3,11 @@ import os
 from pathlib import Path
 from app.chunking.GetCode import GitLabCodeChunker
 from app.embeddings import CodeEmbeddingProcessor
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import ConversationChain
-from langchain.chat_models import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.output_parsers import StrOutputParser
+from operator import itemgetter
+from langchain_openai import ChatOpenAI
 
 from tqdm import tqdm
 import time
@@ -51,20 +53,36 @@ def getCodeReview(url, token, projectId, branch, commits):
                     file_chunks.extend(chunks)
 
         print("청크화 끝")
-        for chunk in tqdm(file_chunks):
-            vectorDB.store_embeddings(chunk)
+        vectorDB.store_embeddings(file_chunks)
+        print("임베딩 끝")
 
+        # 4. commits 에서 코드 분리해 Chunk
+        file_extensions = {
+            'python': ['.py'],
+            'java': ['.java'],
+            'javascript': ['.js', '.jsx'],
+            'c': ['.c', '.h'],
+            'cpp': ['.cpp', '.hpp']
+        }
 
-        # 4. commits 에서 코드 분리해 Chunk 화
         review_queries = [] # path, 코드, 참고할 코드
         for commit in commits:
-            code_chunks = chunker.chunk_code(commit[1])
+            print('commit: ', commit)
+            print(commit['code'])
+            language = get_language_from_extension(commit['fileName'])
+
+            if (language == ''):
+                continue
+            code_chunks = chunker.chunk_code(commit['code'], language)
+            print('code_chunks: ', code_chunks)
             for code_chunk in code_chunks:
-                review_queries.extend([commit[0], code_chunks, vectorDB.store_embeddings(code_chunk)])
+                print("리뷰할 메서드: ", code_chunk)
+                similar_codes = vectorDB.query_similar_code((code_chunk))
+                print("유사코드: ", similar_codes)
+                review_queries.extend(review_queries.append((commit['fileName'], code_chunk, similar_codes)))
 
         # 5. 메서드 별 관련 코드 가져와 리트리버 생성, 질의
         openai_api_key = os.getenv('OPENAI_API_KEY')  # 환경 변수에서 API 키 가져오기
-
 
         llm = ChatOpenAI(
             model="gpt-4o-mini",
@@ -72,7 +90,7 @@ def getCodeReview(url, token, projectId, branch, commits):
             openai_api_key=openai_api_key
         )
         result = get_code_review(review_queries, llm)
-
+        print("질의 끝 : " , result)
         # 6. LLM 에 질의해 결과 반환
         return result
 
@@ -81,55 +99,93 @@ def getCodeReview(url, token, projectId, branch, commits):
         return ''
 
 
-def get_code_review(review_queries, llm):
-    # 메모리 초기화
-    memory = ConversationBufferMemory()
-    conversation = ConversationChain(
-        llm=llm,
-        memory=memory,
-        verbose=True  # 디버깅을 위해 상세 출력 활성화
-    )
+def get_language_from_extension(file_name: str) -> str:
+    extension = file_name.split('.')[-1].lower()  # 확장자 추출
+    # 확장자별 언어 매핑
+    language_map = {
+        'py': 'python',
+        'java': 'java',
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'ts': 'javascript',
+        'tsx': 'javascript',
+        'c': 'c',
+        'cpp': 'cpp',
+        'h': 'c',
+        'hpp': 'cpp'
+    }
 
-    # 각 코드 청크별 리뷰 수행
-    for file_path, code_chunk, similar_codes in review_queries:
-        # 상세 코드 리뷰 요청
-        conversation.predict(input=f"""다음 코드에 대한 상세 코드 리뷰를 수행해주세요:
+    return language_map.get(extension, '')
+
+def get_code_review(review_queries, llm):
+    # 프롬프트 템플릿 정의
+    print(review_queries)
+    review_prompt = ChatPromptTemplate.from_messages([
+        ("human", """
+        너는 최고의 코드 리뷰어야 
+        GraphCodeBERT 를 사용해 메서드별로 기존 프로젝트 에서 유사한 메서드를 가져와 코드 리뷰 을 보냈어
 
             파일 경로: {file_path}
 
-            검토할 코드:
+            리뷰할 메서드:
             ```
             {code_chunk}
             ```
 
-            참고할 유사 코드들:
+            기존 프로젝트의 graphCodeBERT 로 유사도를 검사해 찾은 유사 메서드:
             ```
             {similar_codes}
             ```
 
             다음 관점에서 분석해주세요:
-            1. 코드 품질 (가독성, 유지보수성)
-            2. 잠재적인 버그나 에러
+            1. 코드의 기능 (구현 방법)
+            2. 버그나 에러
             3. 성능 개선 포인트
-            4. 보안 취약점
-            5. 유사 코드와 비교했을 때 개선할 점
             """)
+    ])
 
-    # 이전 대화 내용을 바탕으로 최종 요약 요청
-    final_review = conversation.predict(input="""지금까지 검토한 모든 코드들의 리뷰 내용을 바탕으로 
-        핵심적인 개선사항만 요약해서 제시해주세요.
+    summary_prompt = ChatPromptTemplate.from_messages([
+        ("human", """지금까지 메서드별로 검토한 모든 코드들의 리뷰 내용을 바탕으로 
+            리뷰 요청한 method 별로 알려주고
 
-        다음 형식으로 작성해주세요:
-        1. 주요 개선사항 (우선순위 순)
-        2. 반복적으로 발견되는 패턴
-        3. 전반적인 코드 품질 평가
-        4. 즉시 수정이 필요한 중요 이슈
-        """)
+            다음 형식으로 MarkDown 언어로 예쁘게 작성해주세요:
+            1. 구현한 기능
+            2. 주요 개선사항 (우선순위 순) 
+            3. 즉시 수정이 필요한 중요 이슈
+            """)
+    ])
 
-    return {
-        "summary_review": final_review,
-        "conversation_memory": memory.chat_memory  # 필요시 전체 대화 내용 접근 가능
-    }
+    # 체인 구성
+    review_chain = (
+        review_prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    summary_chain = (
+        summary_prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    # 대화 기록 저장용 리스트
+    conversation_history = []
+
+    # 각 코드 청크별 리뷰 수행
+    for file_path, code_chunk, similar_codes in review_queries:
+        review_result = review_chain.invoke({
+            "file_path": file_path,
+            "code_chunk": code_chunk,
+            "similar_codes": similar_codes
+        })
+        conversation_history.append(review_result)
+
+    # 최종 요약 생성
+    final_review = summary_chain.invoke({
+        "chat_history": "\n\n".join(conversation_history)
+    })
+
+    return final_review
 
 # def generate_code_review(code_snippet, project_id):
 #     vectordb = Chroma(

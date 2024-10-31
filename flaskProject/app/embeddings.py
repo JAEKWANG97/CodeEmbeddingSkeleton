@@ -1,5 +1,5 @@
 # embeddings.py
-from langchain.vectorstores import Chroma
+from langchain_chroma import Chroma
 from .models.codebert_model import get_code_embedding
 from langchain.embeddings.base import Embeddings
 
