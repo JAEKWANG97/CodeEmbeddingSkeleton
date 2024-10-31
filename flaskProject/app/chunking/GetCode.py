@@ -119,15 +119,6 @@ class GitLabCodeChunker:
         """클론된 프로젝트 디렉토리와 그 내부의 모든 파일 삭제"""
         try:
             if self.project_path and self.project_path.exists():
-                #### chunking 디렉토리를 임시 위치로 이동 -> 이후 json 데이터를 임베딩 할꺼라 지워질 것 ####
-                chunking_path = self.project_path / 'chunking'
-                if chunking_path.exists():
-                    temp_chunking_path = self.local_path / 'chunking'
-                    if temp_chunking_path.exists():
-                        shutil.rmtree(temp_chunking_path)
-                    shutil.move(str(chunking_path), str(self.local_path))
-                ###################################################################################
-
                 # Git 저장소 객체 정리
                 try:
                     repo = git.Repo(self.project_path)
@@ -143,21 +134,15 @@ class GitLabCodeChunker:
                     os.chmod(path, stat.S_IWRITE)
                     func(path)
 
-                # 프로젝트 디렉토리의 상위 디렉토리
-                project_parent = self.project_path.parent
+                # projectID 경로 찾기 (project_path의 상위 디렉토리)
+                project_id_path = self.project_path.parent
 
-                # 프로젝트 디렉토리 삭제
-                if self.project_path.exists():
-                    shutil.rmtree(self.project_path, onerror=remove_readonly)
+                # projectID 경로와 그 아래 모든 것을 삭제
+                if project_id_path.exists():
+                    shutil.rmtree(project_id_path, onerror=remove_readonly)
+                    print(f"projectID 디렉토리 삭제 완료: {project_id_path}")
 
-                # local_path 아래의 모든 폴더 삭제
-                for item in self.local_path.iterdir():
-                    #### 이후 json 데이터를 임베딩 할꺼라 지워질 것 ####
-                    if item.is_dir() and item.name != 'chunking':
-                        ###################################################################################
-                        shutil.rmtree(item, onerror=remove_readonly)
-
-                print(f"프로젝트 디렉토리 삭제 완료")
+                print(f"프로젝트 디렉토리 정리 완료")
         except Exception as e:
             print(f"디렉토리 정리 중 에러 발생: {e}")
 
