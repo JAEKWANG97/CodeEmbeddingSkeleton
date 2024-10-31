@@ -3,7 +3,7 @@ from flask import Flask
 from dotenv import load_dotenv
 import os
 
-load_dotenv()  # .env 파일에서 환경 변수 로드
+load_dotenv()  # ..env 파일에서 환경 변수 로드
 
 
 def create_app():

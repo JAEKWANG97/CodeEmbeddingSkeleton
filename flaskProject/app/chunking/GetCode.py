@@ -12,14 +12,14 @@ from .Python_Chunking import extract_functions as python_extract
 from .Java_Chunking import extract_functions as java_extract
 from .JavaScript_Chunking import extract_functions as javascript_extract
 from .C_Chunking import extract_code_elements as c_extract
-from app.embeddings import store_embeddings
 
 
 class GitLabCodeChunker:
-    def __init__(self, gitlab_url: str, gitlab_token: str, project_id: str, local_path: str):
+    def __init__(self, gitlab_url: str, gitlab_token: str, project_id: str, local_path: str, branch: str):
         self.gitlab_url = gitlab_url
         self.gitlab_token = gitlab_token
         self.project_id = project_id
+        self.branch = branch
         self.local_path = Path(local_path)
         self.gl = gitlab.Gitlab(gitlab_url, private_token=gitlab_token)
         self.project_path = None
@@ -97,6 +97,24 @@ class GitLabCodeChunker:
             print(f"청크화 실패: {file_path} - {e}")
             return []
 
+    def chunk_code(self, content: str, language: str) -> List[Dict]:
+        try:
+            if language == 'python':
+                chunks = python_extract(content)
+            elif language == 'java':
+                chunks = java_extract(content)
+            elif language == 'javascript':
+                chunks = javascript_extract(content)
+            elif language in ['c', 'cpp']:
+                chunks = c_extract(content)
+            else:
+                return []
+
+            return chunks
+        except Exception as e:
+            print(f"청크화 실패: {e}")
+            return []
+
     def cleanup_project_directory(self):
         """클론된 프로젝트 디렉토리와 그 내부의 모든 파일 삭제"""
         try:
@@ -143,47 +161,47 @@ class GitLabCodeChunker:
         except Exception as e:
             print(f"디렉토리 정리 중 에러 발생: {e}")
 
-    def process_project(self, projectId):
-        """프로젝트 클론 및 파일 청크화 실행"""
-        try:
-            # 프로젝트 클론
-            project_path = self.clone_project()
-            if not project_path:
-                return
-
-            # chunking 폴더 생성
-            chunking_path = Path(project_path) / 'chunking'
-            chunking_path.mkdir(exist_ok=True)
-
-            # 모든 파일 처리
-            for root, _, files in os.walk(project_path):
-                for file in files:
-                    file_path = Path(root) / file
-
-                    if ('.git' in str(file_path)
-                        or 'chunking' in str(file_path)
-                        or any(part.startswith('.') for part in file_path.parts)
-                        or any(part.startswith('node_modules') for part in file_path.parts)):
-                            continue
-
-                    language = self.get_file_language(str(file_path))
-                    if not language:
-                        continue
-
-                    print(f"처리 중: {file_path}")
-
-                    # 파일 청크화
-                    chunks = self.chunk_file(str(file_path), language)
-                    if chunks:
-                        store_embeddings(chunks, projectId)
-            self.cleanup_project_directory()
-
-        except Exception as e:
-            print(f"프로젝트 처리 중 에러 발생: {e}")
-            # 에러 발생시에도 정리 시도
-            self.cleanup_project_directory()
-
-        print("청킹은 문제없이 완료")
+    # def process_project(self, projectId):
+    #     """프로젝트 클론 및 파일 청크화 실행"""
+    #     try:
+    #         # 프로젝트 클론
+    #         project_path = self.clone_project()
+    #         if not project_path:
+    #             return
+    #
+    #         # chunking 폴더 생성
+    #         chunking_path = Path(project_path) / 'chunking'
+    #         chunking_path.mkdir(exist_ok=True)
+    #
+    #         # 모든 파일 처리
+    #         for root, _, files in os.walk(project_path):
+    #             for file in files:
+    #                 file_path = Path(root) / file
+    #
+    #                 if ('.git' in str(file_path)
+    #                     or 'chunking' in str(file_path)
+    #                     or any(part.startswith('.') for part in file_path.parts)
+    #                     or any(part.startswith('node_modules') for part in file_path.parts)):
+    #                         continue
+    #
+    #                 language = self.get_file_language(str(file_path))
+    #                 if not language:
+    #                     continue
+    #
+    #                 print(f"처리 중: {file_path}")
+    #
+    #                 # 파일 청크화
+    #                 chunks = self.chunk_file(str(file_path), language)
+    #                 if chunks:
+    #                     store_embeddings(chunks, projectId)
+    #         self.cleanup_project_directory()
+    #
+    #     except Exception as e:
+    #         print(f"프로젝트 처리 중 에러 발생: {e}")
+    #         # 에러 발생시에도 정리 시도
+    #         self.cleanup_project_directory()
+    #
+    #     print("청킹은 문제없이 완료")
 
 
 """

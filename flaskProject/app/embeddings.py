@@ -3,7 +3,6 @@ from langchain.vectorstores import Chroma
 from .models.codebert_model import get_code_embedding
 from langchain.embeddings.base import Embeddings
 
-
 # 래퍼 클래스 생성
 class GraphCodeBERTEmbeddings(Embeddings):
     def embed_documents(self, texts):
@@ -12,42 +11,34 @@ class GraphCodeBERTEmbeddings(Embeddings):
     def embed_query(self, code_snippet):
         return get_code_embedding(code_snippet)
 
-
-graphcodebert_embeddings = GraphCodeBERTEmbeddings()
-
-
-
-def store_embeddings(code_snippets, project_id):
-    vectordb = Chroma(
-        embedding_function=graphcodebert_embeddings,
-        collection_name=f'code_embeddings_{project_id}'
-    )
-    try:
-        vectordb.add_texts(
-            texts=code_snippets,
-        )
-        print(f"Stored {len(code_snippets)} code snippets with project_id {project_id}.")
-        return True
-    except Exception as e:
-        print(f"Error storing embeddings: {e}")
-        return False
-
-def query_similar_code(code_snippet, project_id, n_results=5):
-    """입력 코드 스니펫에 대한 유사한 코드를 검색하는 함수"""
-    vectordb = Chroma(
-        embedding_function=graphcodebert_embeddings,
-        collection_name=f'code_embeddings_{project_id}'
-    )
-    try:
-        # 유사도 검색 수행 (필터를 사용하여 project_id로 제한)
-        results = vectordb.similarity_search_with_score(
-            query=code_snippet,
-            k=n_results
+class CodeEmbeddingProcessor:
+    def __init__(self):
+        self.db = Chroma(
+            embedding_function=GraphCodeBERTEmbeddings(),
+            collection_name=f'code_embeddings',
+            persist_directory=None  # 메모리에만 저장
         )
 
-        related_codes = [doc.page_content for doc, score in results]
-        # print(f"Related Codes: {related_codes}")
-        return related_codes
-    except Exception as e:
-        print(f"Error querying similar code: {e}")
-        return []
+    # Chunk 코드 임베딩
+    def store_embeddings(self, code_snippets):
+        try:
+            self.db.add_texts(
+                texts=code_snippets,
+            )
+            return True
+        except Exception as e:
+            print(f"Error storing embeddings: {e}")
+            return False
+
+    # 유사 코드 검색
+    def query_similar_code(self, code_snippet, n_results=5):
+        try:
+            results = self.db.similarity_search_with_score(
+                query=code_snippet,
+                k=n_results
+            )
+            related_codes = [doc.page_content for doc, score in results]
+            return related_codes
+        except Exception as e:
+            print(f"Error querying similar code: {e}")
+            return []
