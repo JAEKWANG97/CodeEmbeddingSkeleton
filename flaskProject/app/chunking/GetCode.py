@@ -46,13 +46,7 @@ class GitLabCodeChunker:
             self.project_path = self.local_path / project.path
             self.project_path.mkdir(parents=True, exist_ok=True)
 
-            if not list(self.project_path.iterdir()):  # 디렉토리가 비어있는 경우에만 클론
-                print(f"클론 중: {project.path}")
-                git.Repo.clone_from(clone_url, str(self.project_path))
-                print(f"클론 완료: {project.path}")
-            else:
-                print(f"이미 존재하는 프로젝트: {project.path}")
-
+            git.Repo.clone_from(clone_url, str(self.project_path))
             return str(self.project_path)
 
         except Exception as e:
@@ -116,7 +110,6 @@ class GitLabCodeChunker:
             return []
 
     def cleanup_project_directory(self):
-        """클론된 프로젝트 디렉토리와 그 내부의 모든 파일 삭제"""
         try:
             if self.project_path and self.project_path.exists():
                 # Git 저장소 객체 정리
@@ -145,49 +138,6 @@ class GitLabCodeChunker:
                 print(f"프로젝트 디렉토리 정리 완료")
         except Exception as e:
             print(f"디렉토리 정리 중 에러 발생: {e}")
-
-    # def process_project(self, projectId):
-    #     """프로젝트 클론 및 파일 청크화 실행"""
-    #     try:
-    #         # 프로젝트 클론
-    #         project_path = self.clone_project()
-    #         if not project_path:
-    #             return
-    #
-    #         # chunking 폴더 생성
-    #         chunking_path = Path(project_path) / 'chunking'
-    #         chunking_path.mkdir(exist_ok=True)
-    #
-    #         # 모든 파일 처리
-    #         for root, _, files in os.walk(project_path):
-    #             for file in files:
-    #                 file_path = Path(root) / file
-    #
-    #                 if ('.git' in str(file_path)
-    #                     or 'chunking' in str(file_path)
-    #                     or any(part.startswith('.') for part in file_path.parts)
-    #                     or any(part.startswith('node_modules') for part in file_path.parts)):
-    #                         continue
-    #
-    #                 language = self.get_file_language(str(file_path))
-    #                 if not language:
-    #                     continue
-    #
-    #                 print(f"처리 중: {file_path}")
-    #
-    #                 # 파일 청크화
-    #                 chunks = self.chunk_file(str(file_path), language)
-    #                 if chunks:
-    #                     store_embeddings(chunks, projectId)
-    #         self.cleanup_project_directory()
-    #
-    #     except Exception as e:
-    #         print(f"프로젝트 처리 중 에러 발생: {e}")
-    #         # 에러 발생시에도 정리 시도
-    #         self.cleanup_project_directory()
-    #
-    #     print("청킹은 문제없이 완료")
-
 
 """
 프로젝트 클론 
